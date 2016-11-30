@@ -6,7 +6,7 @@
 ##   Purpose: Easily manage and monitor the Famous BeeGFS (Parallel HPC FS)   ##
 ##   Writen by: Viktor Zhuromskyy < victor @ goldhub . ca                     ##
 ##   Inspired by BeeGFS: http://www.beegfs.com                                ##
-##   Version: 1.0-r1         Released: 2016-11-29                             ##
+##   Version: 1.0.0-r2       Released: 2016-11-29                             ##
 ##   Licenced under GPLv2                                                     ##
 ##                                                                            ##
 ##   Download: https://github.com/devdesco-ceo/beegfs-mgmt-helper             ##
@@ -274,7 +274,7 @@ get_system_info () {
 ## Get status of BeeGFS processes
 mgmtd_status () {
     service="beegfs-mgmtd"
-    is_running=`ps aux | grep -v grep| grep -v "$service" | grep "beegfs"| wc -l | awk '{print $1}'`
+    is_running=`ps aux | grep -v grep| grep "beegfs" | grep "$service"| wc -l | awk '{print $1}'`
     if [ $is_running != "0" ]
 	then
 	    cecho "$service " green
@@ -282,7 +282,7 @@ mgmtd_status () {
 }
 admon_status () {
     service="beegfs-admon"
-    is_running=`ps aux | grep -v grep| grep -v "$service" | grep "beegfs"| wc -l | awk '{print $1}'`
+    is_running=`ps aux | grep -v grep| grep "beegfs" | grep "$service"| wc -l | awk '{print $1}'`
     if [ $is_running != "0" ]
 	then
 	    cecho "$service " green
@@ -290,7 +290,7 @@ admon_status () {
 }
 meta_status () {
     service="beegfs-meta"
-    is_running=`ps aux | grep -v grep| grep -v "$service" | grep "beegfs"| wc -l | awk '{print $1}'`
+    is_running=`ps aux | grep -v grep| grep "beegfs" | grep "$service"| wc -l | awk '{print $1}'`
     if [ $is_running != "0" ]
 	then
 	    cecho "$service " green
@@ -298,7 +298,7 @@ meta_status () {
 }
 storage_status () {
     service="beegfs-storage"
-    is_running=`ps aux | grep -v grep| grep -v "$service" | grep "beegfs"| wc -l | awk '{print $1}'`
+    is_running=`ps aux | grep -v grep| grep "beegfs" | grep "$service"| wc -l | awk '{print $1}'`
     if [ $is_running != "0" ]
 	then
 	    cecho "$service " green
@@ -306,7 +306,7 @@ storage_status () {
 }
 helperd_status () {
     service="beegfs-helperd"
-    is_running=`ps aux | grep -v grep| grep -v "$service" | grep "beegfs"| wc -l | awk '{print $1}'`
+    is_running=`ps aux | grep -v grep| grep "beegfs" | grep "$service"| wc -l | awk '{print $1}'`
     if [ $is_running != "0" ]
 	then
 	    cecho "$service " green
@@ -317,7 +317,7 @@ helperd_status () {
 banner () {
     cechon " " ; cechon " " ; cechon " "
     cechon "______________________________________________________" green ; cechon " "
-    cechon "     BeeGFS Administrator's Helper (v. 1.0.0-r1)      " boldgreen
+    cechon "     BeeGFS Administrator's Helper (v. 1.0.0-r2)      " boldgreen
     cechon " " ; cechon " " ;
 
     get_system_info
@@ -328,7 +328,7 @@ banner () {
     cecho "$memory_freeHR $unit" green ; cecho " Free / "
     cecho "$memory_availableHR $unit" green ; cechon " Available (Free + Buffers + Cached)"
 
-    cecho "Active local BeeGFS services: " ; mgmtd_status ; admon_status ; meta_status ; storage_status helperd_status
+    cecho "Active local BeeGFS services: " ; mgmtd_status ; admon_status ; meta_status ; storage_status ; helperd_status
     cechon " "
     cechon "______________________________________________________" green ; cechon " "
 }
@@ -459,7 +459,11 @@ do
                     banner ; cechon " " ; cechon " "
                     cechon "         SELECT ONE OF THE ACTIONS AVAILABLE         " boldred ; cechon " "
                     cecho "1." ; cecho " RESYNC Status " red ; cechon "of META nodes"
-                    cecho "2." ; cecho " RESYNC Status " red ; cechon "of STORAGE nodes"
+                    cecho "2." ; cecho " RESYNC Status " red ; cechon "of STORAGE nodes" ; cechon " "
+                    cecho "MR." ; cecho " Request RESYNC " red ; cechon "for META META Nodes Group ID #$meta_mirrorgroupid"
+                    cechon "   Caution: If resyncing is active on Metadata Nodes, connected clients" yellow
+                    cechon "   will experience file system request blocking." yellow
+                    cechon "   Issue RESYNC request only if one of your Metadata Nodes in BAD state." yellow ; cechon " "
                     cechon "q. Return to Main Menu"
                     cechon "______________________________________________________"
                     cechon " " ; read -r -p "Enter your choice [1-3], or [q] to return to Main Menu: " cc
@@ -484,6 +488,11 @@ do
                                     cechon " " ; cechon "RESYNC Status of STORAGE Target ID #$i" boldred
                                     beegfs-ctl --resyncstats --nodetype=metadata --target=$i --mirrorgroupid=$meta_mirrorgroupid
                                 done
+                            cechon " " ; pause;;
+
+                        MR)  clear
+                            cechon " " ; cechon "Sending RESYNC Request to META Nodes Group ID #$meta_mirrorgroupid" boldred
+                            beegfs-ctl --startresync --nodetype=metadata --mirrorgroupid=$meta_mirrorgroupid
                             cechon " " ; pause;;
                         q)  clear ; break;;
                         *)  pause "$proper_action"
