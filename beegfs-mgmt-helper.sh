@@ -6,7 +6,7 @@
 ##   Purpose: Easily manage and monitor the Famous BeeGFS (Parallel HPC FS)   ##
 ##   Writen by: Viktor Zhuromskyy < victor @ goldhub . ca                     ##
 ##   Inspired by BeeGFS: http://www.beegfs.com                                ##
-##   Version: 1.0.0-rc3       Released: 2016-12-01                            ##
+##   Version: 1.0.0-rc3       Released: 2016-12-07                            ##
 ##   Licenced under GPLv2                                                     ##
 ##                                                                            ##
 ##   Download: https://github.com/devdesco-ceo/beegfs-mgmt-helper             ##
@@ -33,7 +33,7 @@
 ## Assign Node / Target ID's and Mirror Group ID for your META and STORAGE nodes
 meta_nodeids=( 1 2 )        # Array of Metadata NodeID's
 meta_mirrorgroupid=1        # Metadata Mirror Buddy Group ID
-storage_targetids=( 1101 2101 3101 4101 3201 4201 ) # Array of Storage Target ID's
+storage_targetids=( 1101 2101 3101 4101 ) # Array of Storage Target ID's
 storage_mirrorgroupids=( 1 2 3 ) # Array of Storage Mirror Buddy Group ID
 
 ## BeeGFS' Mount Points
@@ -47,25 +47,23 @@ beegfs_bench_size=10G       # set your test file size in multiple of BeeGFS chun
 beegfs_bench_threads=12     # number of workers
 
 ## FIO IOPS Benchmark variables
-fio_blocksize=4k            # default: 4k, but you can set it to be, let's say, half of the minimal possible BeeGFS chunk size of 64K
+fio_blocksize=64k           # default: 4k, but you can set it to be, let's say, half of the minimal possible BeeGFS chunk size of 64K
+                            # make sure your block size can divide fio_size evenly
 fio_ioengine=libaio         # libaio Linux native asynchronous I/O. This ioengine defines engine specific options.
-fio_runtime=240             # for how many seconds to run a given test
+fio_runtime=120             # maximum time for running a given test
 fio_rwmixread=75            # for random direct read / write - 75%/25% ratio
-fio_iodepth=32              # default: 1.  Number of I/O units to keep in flight against created file(s).
-fio_size=2G                 # set your test file ssize in multiple of BeeGFS chunk size
-fio_numjobs=1               # number of parallel benchmarks. Start slow with "fio_numjobs=2" and watch "util="
+fio_iodepth=8               # default: 1.  Number of I/O units to keep in flight against created file.
+fio_size=4M                 # set your test file size to be double of average file size in BeeGFS storage, and be dividable by 4K (system block size)
+                            # Use this command to find out: find ./ -size -100000c -ls | awk '{sum += $7; n++;} END {print sum/n;}'
+fio_numjobs=12              # number of parallel benchmarks. Start slow with "fio_numjobs=2" and watch "util="
                             # in benchmark results, as well a actual RAM, CPU and Disk utilization in order
                             # not to hang/kill/freeze/swap your testing system! It is better to raise "fio_size"
                             # than to kill your machines with "fio_numjobs >=2"
 
-## IOPING IOPS Benchmark variables
-ioping_maxiops=1000000     # max number of iops to schedule
-ioping_maxtime=60          # max time to run the tests
-                           # the ioping will end tests whatever comes first - "ioping_maxiops" or "ioping_maxtime"
-ioping_time_period=5       # report raw tatistics every x seconds
-ioping_size=512M           # file size to layout for tests
-ioping_blocksize=4K        # file system block size
-ioping_interval=0            # set 0 for IOPS benchmarking. Default: 1 second
+## IOPING IOPS Benchmark related variables
+ioping_maxiops=1000000      # max number of iops to schedule
+ioping_time_period=5        # report raw tatistics every x seconds
+ioping_interval=0           # set 0 for IOPS benchmarking. Default: 1 second
 
 
 #### -- DO NOT TOUCH ANYTHING BELLOW !!! ####
@@ -652,8 +650,8 @@ do
                     cechon "   with block size of $fio_blocksize, file space of $fio_size, $fio_numjobs process(es) at $fio_netdev" green ; cechon " "
                     cecho "3." ; cecho " Run timed ($fio_runtime sec.) FIO Benchmark of BeeGFS filesystem on" green ; cecho " RANDOM DIRECT WRITE " red ; cechon "operations" green
                     cechon "   with block size of $fio_blocksize, file space of $fio_size, $fio_numjobs process(es) at $fio_netdev" green ; cechon " "
-                    cecho "4." ; cecho " Perform IOPING tests of" green ; cecho " NETWORK LATENCY / FILE ACCESS TIME " red ; cechon "with block size of $ioping_blocksize, file space of $ioping_size," green
-                    cechon "   requesting $ioping_maxiops IOPS for a maximum time of $ioping_maxtime seconds, collecting raw statistics every $ioping_time_period seconds," green
+                    cecho "4." ; cecho " Perform IOPING tests of" green ; cecho " NETWORK LATENCY / FILE ACCESS TIME " red ; cechon "with block size of $fio_blocksize, file space of $fio_size," green
+                    cechon "   requesting $ioping_maxiops IOPS for a maximum time of $fio_runtime seconds, collecting raw statistics every $ioping_time_period seconds," green
                     cechon "   with $ioping_interval seconds interval between requests, and using DIRECT IO at $fio_netdev" green ; cechon " "
                     cechon "   Notice: Benchmark results of both FIO and IOPING will be saved in the location" yellow
                     cechon "   of your beegfs-mgmt-helper.sh script." yellow ; cechon " "
@@ -667,9 +665,11 @@ do
                                 --rw=randrw \
                                 --rwmixread=$fio_rwmixread \
                                 --runtime=$fio_runtime \
+                                --time_based \
                                 --randrepeat=1 \
                                 --numjobs=$fio_numjobs \
                                 --size=$fio_size \
+                                --filesize=$fio_size \
                                 --filename=$fio_block_dev \
                                 --bs=$fio_blocksize \
                                 --direct=1 \
@@ -686,9 +686,11 @@ do
                             fio --name=RandomDirectRead \
                                 --rw=randread \
                                 --runtime=$fio_runtime \
+                                --time_based \
                                 --randrepeat=1 \
                                 --numjobs=$fio_numjobs \
                                 --size=$fio_size \
+                                --filesize=$fio_size \
                                 --filename=$fio_block_dev \
                                 --bs=$fio_blocksize \
                                 --direct=1 \
@@ -705,9 +707,11 @@ do
                             fio --name=RandomDirectWrite \
                                 --rw=randwrite \
                                 --runtime=$fio_runtime \
+                                --time_based \
                                 --randrepeat=1 \
                                 --numjobs=$fio_numjobs \
                                 --size=$fio_size \
+                                --filesize=$fio_size \
                                 --filename=$fio_block_dev \
                                 --bs=$fio_blocksize \
                                 --direct=1 \
@@ -720,7 +724,7 @@ do
                                 rm $fio_block_dev
                             cechon " " ; cechon "Benchmarking results are saved in $PWD/fio_rand-direct-write_$dt.txt" yellow ; cechon " " ; pause;;
                         4)  clear
-                            cechon " " ; cechon "Measuring NETWORK LATENCY / FILE ACCESS TIME with block size of $ioping_blocksize, file space of $ioping_size, requesting $ioping_maxiops IOPS for a maximum time of $ioping_maxtime seconds, collecting raw statistics every $ioping_time_period seconds, with $ioping_interval seconds interval between requests, and using DIRECT IO at $fio_netdev" boldred ; cechon " "
+                            cechon " " ; cechon "Measuring NETWORK LATENCY / FILE ACCESS TIME with block size of $fio_blocksize, file space of $fio_size, requesting $ioping_maxiops IOPS for a maximum time of $fio_runtime seconds, collecting raw statistics every $ioping_time_period seconds, with $ioping_interval seconds interval between requests, and using DIRECT IO at $fio_netdev" boldred ; cechon " "
                             cechon "How to read RAW STATISTICS:" boldyellow ; cechon " "
                             cechon "17805 4513437 3945 16158258 50 253 2601 113" yellow
                             cechon "17881 4577080 3907 16001594 47 256 2606 99" yellow
@@ -734,7 +738,7 @@ do
                             cechon "(7) maximum request time (usec)" yellow
                             cechon "(8) request time standard deviation (usec)" yellow ; cechon " "
                             cechon "RAW STATISTICS:" boldgreen
-                            ioping -c $ioping_maxiops -w $ioping_maxtime -P $ioping_time_period -S $ioping_size -s $ioping_blocksize -i $ioping_interval -q -D $fio_netdev/ 2>&1 | tee ./ioping_results_$dt.txt
+                            ioping -c $ioping_maxiops -w $fio_runtime -P $ioping_time_period -S $fio_size -s $fio_blocksize -i $ioping_interval -q -D $fio_netdev/ 2>&1 | tee ./ioping_results_$dt.txt
                             cechon " " ; cechon "Benchmarking results are saved in $PWD/ioping_results_$dt.txt" yellow ; cechon " " ; pause;;
                         q)  clear ; break;;
                         *)  pause "$proper_action"
