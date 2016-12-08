@@ -6,7 +6,7 @@
 ##   Purpose: Easily manage and monitor the Famous BeeGFS (Parallel HPC FS)   ##
 ##   Writen by: Viktor Zhuromskyy < victor @ goldhub . ca                     ##
 ##   Inspired by BeeGFS: http://www.beegfs.com                                ##
-##   Version: 1.0.0-rc3       Released: 2016-12-07                            ##
+##   Version: 1.0.0-rc4       Released: 2016-12-08                            ##
 ##   Licenced under GPLv2                                                     ##
 ##                                                                            ##
 ##   Download: https://github.com/devdesco-ceo/beegfs-mgmt-helper             ##
@@ -276,19 +276,19 @@ human_readable () {
 	    scale="2"
 	fi
 	divide "$var1" "1073741824" "$var2" "$scale"
-	unit="G"
+	unit="GB"
     elif [ $((var1 >= 1048576)) -ne 0 ] ; then
 	if [ -z "$var3" ] ; then
 	    scale="0"
 	fi
 	divide "$var1" "1048576" "$var2" "$scale"
-	unit="M"
+	unit="MB"
     elif [ $((var1 >= 1024)) -ne 0 ] ; then
 	if [ -z "$var3" ] ; then
 	    scale="0"
 	fi
 	divide "$var1" "1024" "$var2" "$scale"
-	unit="K"
+	unit="KB"
     else
 	export "$var2"="$var1"
 	unit="bytes"
@@ -310,77 +310,117 @@ get_system_info () {
 ## Get status of BeeGFS processes
 mgmtd_status () {
     service="beegfs-mgmtd"
+    cpu_limit="5000" # limit in xx%*100
+    ram_limit_mb="4096" # limit in xx MB
     is_running=`ps aux | grep -v grep| grep "beegfs" | grep "$service"| wc -l | awk '{print $1}'`
+    app_pid=`ps aux | grep $service | grep -v grep | awk {'print $2'}`
+    app_cpu=`ps aux | grep $service | grep -v grep | awk {'print $3*100'}`
     if [ $is_running != "0" ]
-	then
-	    for p in $(pgrep $service); do ram_used=$(($total + $(awk '/VmSize/ { print $2 }' /proc/$p/status))); done
+        then
+            for p in $(pgrep $service); do ram_used=$(($total + $(awk '/VmSize/ { print $2 }' /proc/$p/status))); done
             ram_used_mb=$(($ram_used / 1024))
-	    cecho "$service" green ; cecho " ($ram_used_mb M), "
-            unset ram_used
-	fi
+            if [[ $ram_used_mb -gt $ram_limit_mb ]]; then rcolor="red" ; else rcolor="green" ; fi
+            if [[ $app_cpu -gt $cpu_limit ]]; then ccolor="red" ; else ccolor="green" ; fi
+            cpu_used=$(($app_cpu / 100))
+            human_readable "$(($ram_used * 1024 ))" memoryHR
+            cecho "$service" green ; printf '\t' ; cecho "  RAM: " ; cecho "$memoryHR" $rcolor ; cecho " $unit" $rcolor ; printf '\t' ; cecho " CPU: " ; cecho "$cpu_used" $ccolor ; cecho "% " $ccolor; printf '\t' ; cecho "PID: $app_pid" ; cechon " " ; printf '\t\t'
+            unset ram_used ; unset app_cpu ; unset app_pid
+        fi
 }
 admon_status () {
     service="beegfs-admon"
+    cpu_limit="5000" # limit in xx%*100
+    ram_limit_mb="2048" # limit in xx MB
     is_running=`ps aux | grep -v grep| grep "beegfs" | grep "$service"| wc -l | awk '{print $1}'`
+    app_pid=`ps aux | grep $service | grep -v grep | awk {'print $2'}`
+    app_cpu=`ps aux | grep $service | grep -v grep | awk {'print $3*100'}`
     if [ $is_running != "0" ]
-	then
-	    for p in $(pgrep $service); do ram_used=$(($total + $(awk '/VmSize/ { print $2 }' /proc/$p/status))); done
+        then
+            for p in $(pgrep $service); do ram_used=$(($total + $(awk '/VmSize/ { print $2 }' /proc/$p/status))); done
             ram_used_mb=$(($ram_used / 1024))
-	    cecho "$service" green ; cecho " ($ram_used_mb M), "
-            unset ram_used
-	fi
+            if [[ $ram_used_mb -gt $ram_limit_mb ]]; then rcolor="red" ; else rcolor="green" ; fi
+            if [[ $app_cpu -gt $cpu_limit ]]; then ccolor="red" ; else ccolor="green" ; fi
+            cpu_used=$(($app_cpu / 100))
+            human_readable "$(($ram_used * 1024 ))" memoryHR
+            cecho "$service" green ; printf '\t' ; cecho "  RAM: " ; cecho "$memoryHR" $rcolor ; cecho " $unit" $rcolor ; printf '\t' ; cecho " CPU: " ; cecho "$cpu_used" $ccolor ; cecho "% " $ccolor; printf '\t' ; cecho "PID: $app_pid" ; cechon " " ; printf '\t\t'
+            unset ram_used ; unset app_cpu ; unset app_pid
+        fi
 }
 meta_status () {
     service="beegfs-meta"
+    cpu_limit="5000" # limit in xx%*100
+    ram_limit_mb="6144" # limit in xx MB
     is_running=`ps aux | grep -v grep| grep "beegfs" | grep "$service"| wc -l | awk '{print $1}'`
+    app_pid=`ps aux | grep $service | grep -v grep | awk {'print $2'}`
+    app_cpu=`ps aux | grep $service | grep -v grep | awk {'print $3*100'}`
     if [ $is_running != "0" ]
-	then
-	    for p in $(pgrep $service); do ram_used=$(($total + $(awk '/VmSize/ { print $2 }' /proc/$p/status))); done
+        then
+            for p in $(pgrep $service); do ram_used=$(($total + $(awk '/VmSize/ { print $2 }' /proc/$p/status))); done
             ram_used_mb=$(($ram_used / 1024))
-	    cecho "$service" green ; cecho " ($ram_used_mb M), "
-            unset ram_used
-	fi
+            if [[ $ram_used_mb -gt $ram_limit_mb ]]; then rcolor="red" ; else rcolor="green" ; fi
+            if [[ $app_cpu -gt $cpu_limit ]]; then ccolor="red" ; else ccolor="green" ; fi
+            cpu_used=$(($app_cpu / 100))
+            human_readable "$(($ram_used * 1024 ))" memoryHR
+            cecho "$service" green ; printf '\t' ; cecho "  RAM: " ; cecho "$memoryHR" $rcolor ; cecho " $unit" $rcolor ; printf '\t' ; cecho " CPU: " ; cecho "$cpu_used" $ccolor ; cecho "% " $ccolor; printf '\t' ; cecho "PID: $app_pid" ; cechon " " ; printf '\t\t'
+            unset ram_used ; unset app_cpu ; unset app_pid
+        fi
 }
 storage_status () {
     service="beegfs-storage"
+    cpu_limit="5000" # limit in xx%*100
+    ram_limit_mb="4096" # limit in xx MB
     is_running=`ps aux | grep -v grep| grep "beegfs" | grep "$service"| wc -l | awk '{print $1}'`
+    app_pid=`ps aux | grep $service | grep -v grep | awk {'print $2'}`
+    app_cpu=`ps aux | grep $service | grep -v grep | awk {'print $3*100'}`
     if [ $is_running != "0" ]
-	then
-	    for p in $(pgrep $service); do ram_used=$(($total + $(awk '/VmSize/ { print $2 }' /proc/$p/status))); done
+        then
+            for p in $(pgrep $service); do ram_used=$(($total + $(awk '/VmSize/ { print $2 }' /proc/$p/status))); done
             ram_used_mb=$(($ram_used / 1024))
-	    cecho "$service" green ; cecho " ($ram_used_mb M), "
-            unset ram_used
-	fi
+            if [[ $ram_used_mb -gt $ram_limit_mb ]]; then rcolor="red" ; else rcolor="green" ; fi
+            if [[ $app_cpu -gt $cpu_limit ]]; then ccolor="red" ; else ccolor="green" ; fi
+            cpu_used=$(($app_cpu / 100))
+            human_readable "$(($ram_used * 1024 ))" memoryHR
+            cecho "$service" green ; printf '\t' ; cecho "  RAM: " ; cecho "$memoryHR" $rcolor ; cecho " $unit" $rcolor ; printf '\t' ; cecho " CPU: " ; cecho "$cpu_used" $ccolor ; cecho "% " $ccolor; printf '\t' ; cecho "PID: $app_pid" ; cechon " " ; printf '\t\t'
+            unset ram_used ; unset app_cpu ; unset app_pid
+        fi
 }
 helperd_status () {
     service="beegfs-helperd"
+    cpu_limit="5000" # limit in xx%*100
+    ram_limit_mb="2048" # limit in xx MB
     is_running=`ps aux | grep -v grep| grep "beegfs" | grep "$service"| wc -l | awk '{print $1}'`
+    app_pid=`ps aux | grep $service | grep -v grep | awk {'print $2'}`
+    app_cpu=`ps aux | grep $service | grep -v grep | awk {'print $3*100'}`
     if [ $is_running != "0" ]
-	then
-	    for p in $(pgrep $service); do ram_used=$(($total + $(awk '/VmSize/ { print $2 }' /proc/$p/status))); done
+        then
+            for p in $(pgrep $service); do ram_used=$(($total + $(awk '/VmSize/ { print $2 }' /proc/$p/status))); done
             ram_used_mb=$(($ram_used / 1024))
-	    cecho "$service" green ; cecho " ($ram_used_mb M)"
-            unset ram_used
-	fi
+            if [[ $ram_used_mb -gt $ram_limit_mb ]]; then rcolor="red" ; else rcolor="green" ; fi
+            if [[ $app_cpu -gt $cpu_limit ]]; then ccolor="red" ; else ccolor="green" ; fi
+            cpu_used=$(($app_cpu / 100))
+            human_readable "$(($ram_used * 1024 ))" memoryHR
+            cecho "$service" green ; printf '\t' ; cecho "  RAM: " ; cecho "$memoryHR" $rcolor ; cecho " $unit" $rcolor ; printf '\t' ; cecho " CPU: " ; cecho "$cpu_used" $ccolor ; cecho "% " $ccolor; printf '\t' ; cecho "PID: $app_pid" ; cechon " " ; printf '\t\t'
+            unset ram_used ; unset app_cpu ; unset app_pid
+        fi
 }
+
 
 ## Banner
 banner () {
-    cechon " " ; cechon " " ; cechon " "
-    cechon "______________________________________________________" green ; cechon " "
-    cechon "     BeeGFS Administrator's Helper (v. 1.0.0-rc3)     " boldgreen
-    cechon " " ; cechon " " ;
+    cechon " " ; cechon " "
+    cechon "_______________________________________________________________________________" green
+    cechon "              -- BeeGFS Administrator's Helper (v. 1.0.0-rc4) --" boldgreen
+    cechon " "
 
     get_system_info
     human_readable "$memory" memoryHR
     human_readable "$memory_free" memory_freeHR
     human_readable "$memory_available" memory_availableHR
-    cecho "Memory: " ; cecho "$memoryHR$unit" green ; cecho " Installed / "
-    cecho "$memory_freeHR$unit" green ; cecho " Free / "
-    cecho "$memory_availableHR$unit" green ; cechon " Available (Free + Buffers + Cached)"
-    cecho "Local Services: " ; mgmtd_status ; admon_status ; meta_status ; storage_status ; helperd_status
-    cechon " "
-    cechon "______________________________________________________" green ; cechon " "
+    cecho "System Memory: " ; cecho "$memoryHR $unit" green ; cecho " Installed / "
+    cecho "$memory_freeHR $unit" green ; cecho " Free / "
+    cechon "$memory_availableHR $unit" green
+    cecho "Local Services:" ; printf '\t' ; mgmtd_status ; admon_status ; meta_status ; storage_status ; helperd_status ; cechon " "
+    cechon "_______________________________________________________________________________" green
 }
  
 ## Display Menu and process command prompts
@@ -395,7 +435,7 @@ while :
 do
     clear
     banner ; cechon " " ; cechon " "
-    cechon "         SELECT ONE OF THE ACTIONS AVAILABLE         " boldred ; cechon " "
+    cechon "SELECT ONE OF THE ACTIONS AVAILABLE:" boldgreen
     cecho "1. Show" ; cecho " Extended Status " red ; cechon "of META, STORAGE nodes"
     cecho "2. Show" ; cecho " Buddy / Mirror Groups " red ; cechon "for META, STORAGE nodes"
     cecho "3. Check" ; cecho " Connectivity / Reachability " red ; cechon "of META, STORAGE nodes and CLIENTS"
@@ -405,7 +445,7 @@ do
     cecho "7. Run native" ; cechon " BEEGFS BENCHMARKS " red
     cecho "8. Run alternative" ; cechon " FIO / IOPING BENCHMARKS " red ; cechon " "
     cechon "q. Exit"
-    cechon "______________________________________________________"
+    cechon "_______________________________________________________________________________"
     cecho  " " ; read -r -p "Enter your choice [1-8], or [q] to exit : " c
     # take action
     case $c in
@@ -425,12 +465,12 @@ do
                 do
                     clear
                     banner ; cechon " " ; cechon " "
-                    cechon "         SELECT ONE OF THE ACTIONS AVAILABLE         " boldred ; cechon " "
+                    cechon "SELECT ONE OF THE ACTIONS AVAILABLE:" boldgreen
                     cecho "1. Check META nodes" ; cechon " Connectivity / Reachability " red
                     cecho "2. Check STORAGE nodes" ; cechon " Connectivity / Reachability " red
                     cecho "3. Check CLIENTS" ; cechon " Connectivity / Reachability " red ; cechon " "
                     cechon "q. Return to Main Menu"
-                    cechon "______________________________________________________"
+                    cechon "_______________________________________________________________________________"
                     cechon " " ; read -r -p "Enter your choice [1-3], or [q] to return to Main Menu: " cc
                     case $cc in
                         1)  clear
@@ -453,7 +493,7 @@ do
                 do
                     clear
                     banner ; cechon " " ; cechon " "
-                    cechon "         SELECT ONE OF THE ACTIONS AVAILABLE         " boldred ; cechon " "
+                    cechon "SELECT ONE OF THE ACTIONS AVAILABLE:" boldgreen
                     cechon " Warning: Live IO Stats are CPU / RAM and DISK IO intensive" yellow ;
                     cechon "          Continuous fetching of the IO Stats will negatively affect performance of BeeGFS..." yellow
                     cechon "          To stop Live IO Stats Stream, press any key to stop the madness!" yellow ; cechon " "
@@ -464,7 +504,7 @@ do
                     cecho "5. Fetch IO Stats on" ; cecho " STORAGE nodes for all connected CLIENT nodes " red ; cechon "accessing BeeGFS mounts"
                     cecho "6. Fetch IO Stats on" ; cecho " STORAGE nodes for all SYSTEM USERS " red ; cechon "accessing BeeGFS mounts" ; cechon " "
                     cechon "q. Return to Main Menu"
-                    cechon "______________________________________________________"
+                    cechon "_______________________________________________________________________________"
                     cechon " " ; read -r -p "Enter your choice [1-6], or [q] to return to Main Menu: " cc
                     case $cc in
                         1)  clear
@@ -505,7 +545,7 @@ do
                 do
                     clear
                     banner ; cechon " " ; cechon " "
-                    cechon "         SELECT ONE OF THE ACTIONS AVAILABLE         " boldred ; cechon " "
+                    cechon "SELECT ONE OF THE ACTIONS AVAILABLE:" boldgreen
                     cecho "1." ; cecho " RESYNC Status " red ; cechon "of META nodes"
                     cecho "2." ; cecho " RESYNC Status " red ; cechon "of STORAGE nodes" ; cechon " "
 
@@ -516,10 +556,10 @@ do
                             done ; cecho " ) in Mirror Group " ; cechon "#$meta_mirrorgroupid" boldred
 
                     cechon "   Caution: If resyncing is active on Metadata Nodes, connected clients" yellow
-                    cechon "   will experience file system request blocking." yellow
-                    cechon "   Issue RESYNC request only if one of your META Nodes IS in a BAD state." yellow ; cechon " "
+                    cechon "   will experience lagged file access due to temporary blocking of metadata access." yellow
+                    cechon "   Issue RESYNC request only if one of your META Nodes IS in a BAD Consistency." yellow ; cechon " "
                     cechon "q. Return to Main Menu"
-                    cechon "______________________________________________________"
+                    cechon "_______________________________________________________________________________"
                     cechon " " ; read -r -p "Enter your choice [1-2, MR], or [q] to return to Main Menu: " cc
                     case $cc in
                         1)  clear
@@ -556,7 +596,7 @@ do
                 do
                     clear
                     banner ; cechon " " ; cechon " "
-                    cechon "         SELECT ONE OF THE ACTIONS AVAILABLE         " boldred ; cechon " "
+                    cechon "SELECT ONE OF THE ACTIONS AVAILABLE:" boldgreen
                     cecho "1." ; cechon " Look for Unused Inodes and Dispose the Orphants" red
                     cecho "2." ; cechon " Check for Errors in BeeGFS File System without any Repair Attempts" red
                     cecho "3." ; cechon " Check for Errors in BeeGFS File System, and attempt Automatic Repairs (online)" red ; cechon " "
@@ -566,7 +606,7 @@ do
                     cechon "   Use this only if you are sure there is no user access to the file" yellow
                     cechon "   system while the check is running." yellow ; cechon " "
                     cechon "q. Return to Main Menu"
-                    cechon "______________________________________________________"
+                    cechon "_______________________________________________________________________________"
                     cechon " " ; read -r -p "Enter your choice [1-3], or [q] to return to Main Menu: " cc
                     case $cc in
                         1)  clear
@@ -593,7 +633,7 @@ do
                 do
                     clear
                     banner ; cechon " " ; cechon " "
-                    cechon "         SELECT ONE OF THE ACTIONS AVAILABLE         " boldred ; cechon " "
+                    cechon "SELECT ONE OF THE ACTIONS AVAILABLE:" boldgreen
                     cechon "Warning: Benchmarking operations are CPU, Disk and Network intensive," yellow
                     cechon "         thus your users and / or applications will experience delayed FS access." yellow ; cechon " "
                     cecho "1." ; cecho " STEP 1.1: Launch BeeGFS filesystem Benchmark on all storage targets for" green ; cecho " WRITE " red ; cechon "operations with block size of $beegfs_bench_blocksize, file space of $beegfs_bench_size, and $beegfs_bench_threads CPU threads" green ; cechon " "
@@ -610,7 +650,7 @@ do
                     cechon "   you are urged to free up disk space by running the Automatic CLEANUP of BeeGFS File System," yellow
                     cechon "   in order to get rid of multi-gigabyte files created in each Storage Tagret." yellow ; cechon " "
                     cechon "q. Return to Main Menu"
-                    cechon "______________________________________________________"
+                    cechon "_______________________________________________________________________________"
                     cechon " " ; read -r -p "Enter your choice [1-3], or [q] to return to Main Menu: " cc
                     case $cc in
                         1)  clear
@@ -641,7 +681,7 @@ do
                 do
                     clear
                     banner ; cechon " " ; cechon " "
-                    cechon "         SELECT ONE OF THE ACTIONS AVAILABLE         " boldred ; cechon " "
+                    cechon "SELECT ONE OF THE ACTIONS AVAILABLE:" boldgreen
                     cechon "Warning: Benchmarking operations are CPU, Disk and Network intensive," yellow
                     cechon "         thus your users and / or applications will experience delayed FS access." yellow ; cechon " "
                     cecho "1." ; cecho " Run timed ($fio_runtime sec.) FIO Benchmark of BeeGFS filesystem on" green ; cecho " RANDOM DIRECT READ / WRITE " red ; cechon "operations" green
@@ -656,7 +696,7 @@ do
                     cechon "   Notice: Benchmark results of both FIO and IOPING will be saved in the location" yellow
                     cechon "   of your beegfs-mgmt-helper.sh script." yellow ; cechon " "
                     cechon "q. Return to Main Menu"
-                    cechon "______________________________________________________"
+                    cechon "_______________________________________________________________________________"
                     cechon " " ; read -r -p "Enter your choice [1-3], or [q] to return to Main Menu: " cc
                     case $cc in
                         1)  clear
