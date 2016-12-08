@@ -13,6 +13,10 @@ You are free to use the script in your Production setup, and if any ideas arise,
 **Requirements**
 * Have BeeGFS system set up
 * Run on the Management Host with `beegfs-utils` package installed
+* To be able to use all of the functions of the script, it is advised to execute the script under `root user` or with `sudo` command
+
+**Change initial settings**
+Under `#### EDIT VARIABLES BELLOW, TO FIT YOUR ENVIRONMENT ####` change variables' values to match your BeeGFS environment.
 
 **Supported Systems**
 Any Linux Distribution with latest BeeGFS build
