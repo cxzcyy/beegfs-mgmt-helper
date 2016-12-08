@@ -16,8 +16,10 @@ You are free to use the script in your Production setup, and if any ideas arise,
 * To be able to use all of the functions of the script, it is advised to execute the script under `root user` or with `sudo` command
 
 **Change initial settings**
+
 Under `#### EDIT VARIABLES BELLOW, TO FIT YOUR ENVIRONMENT ####` change variables' values to match your BeeGFS environment.
 
 **Supported Systems**
+
 Any Linux Distribution with latest BeeGFS build
 * Developed, and Deployed under Ubuntu 16.04
