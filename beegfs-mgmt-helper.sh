@@ -6,7 +6,7 @@
 ##   Purpose: Easily manage and monitor the Famous BeeGFS (Parallel HPC FS)   ##
 ##   Writen by: Viktor Zhuromskyy < victor @ goldhub . ca                     ##
 ##   Inspired by BeeGFS: http://www.beegfs.com                                ##
-##   Version: 1.0.0-rc4       Released: 2016-12-08                            ##
+##   Version: 1.0.0-rc5       Released: 2016-12-12                            ##
 ##   Licenced under GPLv2                                                     ##
 ##                                                                            ##
 ##   Download: https://github.com/devdesco-ceo/beegfs-mgmt-helper             ##
@@ -33,20 +33,27 @@
 ## Assign Node / Target ID's and Mirror Group ID for your META and STORAGE nodes
 meta_nodeids=( 1 2 )        # Array of Metadata NodeID's
 meta_mirrorgroupid=1        # Metadata Mirror Buddy Group ID
-storage_targetids=( 1101 2101 3101 4101 ) # Array of Storage Target ID's
-storage_mirrorgroupids=( 1 2 3 ) # Array of Storage Mirror Buddy Group ID
+storage_targetids=( 1101 2101 3101 4101 3102 4102 ) # Array of Storage Target ID's
+storage_mirrorgroupids=( 1 2 4 ) # Array of Storage Mirror Buddy Group ID
 
 ## BeeGFS' Mount Points
 beegfs_mount=/var/data/gfs  # Mount point from your /etc/beegfs/beegfs-mounts.conf
 fio_bench_point=/www        # set the variable to an existing path inside the mounted
                             # beegfs_mount location you want to run FIO benchmarks on
+beegfs_storage_base=/var/data/beegfs_fio_test     # set the variable to the mount point of your storage target data location on this local machine
+                                                  # if you want to run FIO benchmarks on the machine's file system for doing comparison of NAS vs LOCAL
+                                                  # In order to simplify the benchmarking process, I suggest symlinking your /dev/sdXX mounts to something
+                                                  # like /var/data/sdX_fio_test
+
 
 ## BeeGFS' IOPS Benchmark variables
-beegfs_bench_blocksize=64K  # I set it to be minimal possible BeeGFS chunk size
-beegfs_bench_size=10G       # set your test file size in multiple of BeeGFS chunk size
-beegfs_bench_threads=12     # number of workers
+beegfs_bench_blocksize=32K # I set it to be half of the minimal possible BeeGFS chunk size
+beegfs_bench_size=8G       # set your test file size in multiple of BeeGFS chunk size
+beegfs_bench_threads=6     # number of workers
 
 ## FIO IOPS Benchmark variables
+bench_res_dir=bench_results # crete named directory in the same location where the beegfs-mgmt-helper.sh is being executed at,
+                            # and save benchmarking results of FIO and IOPING
 fio_blocksize=64k           # default: 4k, but you can set it to be, let's say, half of the minimal possible BeeGFS chunk size of 64K
                             # make sure your block size can divide fio_size evenly
 fio_ioengine=libaio         # libaio Linux native asynchronous I/O. This ioengine defines engine specific options.
@@ -69,12 +76,16 @@ ioping_interval=0           # set 0 for IOPS benchmarking. Default: 1 second
 #### -- DO NOT TOUCH ANYTHING BELLOW !!! ####
 PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin
 
+release="v. 1.0.0-rc5"
 dt=$(date '+%Y-%m-%d.%H:%M')
 uid=$(cat /proc/sys/kernel/random/uuid)
+
 
 fio_netdev=$beegfs_mount$fio_bench_point
 fio_block_dev=$fio_netdev/fio_bench_$uid.dat
 fio_rwmixwrite=$((100 - $fio_rwmixread))
+PWD_BR=$PWD/$bench_res_dir
+
 
 ## Intercept Keyboard Input
 trap '' SIGINT
@@ -409,16 +420,16 @@ helperd_status () {
 banner () {
     cechon " " ; cechon " "
     cechon "_______________________________________________________________________________" green
-    cechon "              -- BeeGFS Administrator's Helper (v. 1.0.0-rc4) --" boldgreen
+    cechon "              -- BeeGFS Administrator's Helper ($release) --" boldgreen
     cechon " "
 
     get_system_info
     human_readable "$memory" memoryHR
     human_readable "$memory_free" memory_freeHR
     human_readable "$memory_available" memory_availableHR
-    cecho "System Memory: " ; cecho "$memoryHR $unit" green ; cecho " Installed / "
-    cecho "$memory_freeHR $unit" green ; cecho " Free / "
-    cechon "$memory_availableHR $unit" green
+    cecho "System Memory:  " ; cecho "$memoryHR $unit" green ; cecho " / "
+    cecho "$memory_freeHR $unit" green ; cecho " / "
+    cecho "$memory_availableHR $unit" green ; cechon " (Installed/Free/Available)"
     cecho "Local Services:" ; printf '\t' ; mgmtd_status ; admon_status ; meta_status ; storage_status ; helperd_status ; cechon " "
     cechon "_______________________________________________________________________________" green
 }
@@ -430,59 +441,66 @@ pause(){
     read -p "Press [ ENTER ] key to return to the menu ..." key
 }
 proper_action="Select proper action key"
+select_option="SELECT ONE OF THE ACTIONS AVAILABLE:"
+return_to_main="q. Return to Main Menu"
+stop_live_output="Press any key to stop the Live Output"
+meta_name="Meta Data"
+storage_name="Storage"
+clients_name="Clients"
 
 while :
 do
     clear
     banner ; cechon " " ; cechon " "
-    cechon "SELECT ONE OF THE ACTIONS AVAILABLE:" boldgreen
-    cecho "1. Show" ; cecho " Extended Status " red ; cechon "of META, STORAGE nodes"
-    cecho "2. Show" ; cecho " Buddy / Mirror Groups " red ; cechon "for META, STORAGE nodes"
-    cecho "3. Check" ; cecho " Connectivity / Reachability " red ; cechon "of META, STORAGE nodes and CLIENTS"
-    cecho "4. Fetch" ; cechon " Live IO Stats " red
-    cecho "5. Check" ; cecho " RESYNC Status " red ; cechon "of META, STORAGE nodes"
-    cecho "6. Perform" ; cechon " DIAGNOSTICS, CLEANUP and AUTO  REPAIR" red
-    cecho "7. Run native" ; cechon " BEEGFS BENCHMARKS " red
-    cecho "8. Run alternative" ; cechon " FIO / IOPING BENCHMARKS " red ; cechon " "
+    cechon "$select_option" boldgreen
+    cecho "1. Show" ; cecho " Extended Status " green ; cechon "of $meta_name, $storage_name nodes"
+    cecho "2. Show" ; cecho " Buddy / Mirror Groups " green ; cechon "for $meta_name, $storage_name nodes"
+    cecho "3. Check" ; cecho " Connectivity / Reachability " green ; cechon "of $meta_name, $storage_name nodes and $clients_name"
+    cecho "4. Fetch" ; cechon " Live IO Stats " yellow
+    cecho "5. Check" ; cecho " RESYNC Status " green ; cechon "of $meta_name, $storage_name nodes"
+    cecho "6. Perform" ; cecho " Diagnostics, Clean Up and Auto Repair" red ; cechon " of BeeGFS File System"
+    cecho "7. Run" ; cecho " Native Benchmarks " green ; cechon "(BeeGFS Network File System throughput benchmarking)"
+    cecho "8. Run" ; cecho " FIO, IOPING Benchmarks " green ; cechon "(BeeGFS Network File System IOPS benchmarking with alternative tools)"
+    cecho "9. Run" ; cecho " FIO, IOPING Benchmarks " green ; cechon "(benchmarking of underlying FS for local BeeGFS' $storage_name Target)" ; cechon " "
     cechon "q. Exit"
     cechon "_______________________________________________________________________________"
-    cecho  " " ; read -r -p "Enter your choice [1-8], or [q] to exit : " c
+    cecho  " " ; read -r -p "Enter your choice [1-9], or [q] to exit : " c
     # take action
     case $c in
 	1)  clear
-	    cechon " " ; cechon "Extended Status of META nodes" boldred
+	    cechon " " ; cechon "Extended Status of $meta_name nodes" boldgreen ; cechon " "
 	    beegfs-ctl --listtargets --longnodes --state --pools --nodesfirst --spaceinfo --mirrorgroups --nodetype=meta
-	    cechon " " ; cechon " " ; cechon "Extended status of STORAGE nodes" boldred
+	    cechon " " ; cechon " " ; cechon "Extended status of $storage_name nodes" boldgreen ; cechon " "
 	    beegfs-ctl --listtargets --longnodes --state --pools --nodesfirst --spaceinfo --mirrorgroups --nodetype=storage
 	    cechon " " ; pause;;
 	2)  clear
-	    cechon " " ; cechon "Buddy / Mirror Groups for META nodes" boldred
+	    cechon " " ; cechon "Buddy / Mirror Groups for $meta_name nodes" boldgreen ; cechon " "
 	    beegfs-ctl --listmirrorgroups --nodetype=meta
-	    cechon " " ; cechon " " ; cechon "Buddy / Mirror Groups for STORAGE nodes" boldred
+	    cechon " " ; cechon " " ; cechon "Buddy / Mirror Groups for $storage_name nodes" boldgreen ; cechon " "
 	    beegfs-ctl --listmirrorgroups --nodetype=storage
 	    cechon " " ; pause;;
         3)  while :
                 do
                     clear
                     banner ; cechon " " ; cechon " "
-                    cechon "SELECT ONE OF THE ACTIONS AVAILABLE:" boldgreen
-                    cecho "1. Check META nodes" ; cechon " Connectivity / Reachability " red
-                    cecho "2. Check STORAGE nodes" ; cechon " Connectivity / Reachability " red
-                    cecho "3. Check CLIENTS" ; cechon " Connectivity / Reachability " red ; cechon " "
-                    cechon "q. Return to Main Menu"
+                    cechon "$select_option" boldgreen
+                    cecho "1. Check $meta_name nodes" ; cechon " Connectivity / Reachability " green
+                    cecho "2. Check $storage_name nodes" ; cechon " Connectivity / Reachability " green
+                    cecho "3. Check $clients_name" ; cechon " Connectivity / Reachability " green ; cechon " "
+                    cechon "$return_to_main"
                     cechon "_______________________________________________________________________________"
                     cechon " " ; read -r -p "Enter your choice [1-3], or [q] to return to Main Menu: " cc
                     case $cc in
                         1)  clear
-                            cechon " " ; cechon "Connectivity / Reachability of META nodes" boldred
+                            cechon " " ; cechon "Connectivity / Reachability of $meta_name nodes" boldgreen ; cechon " "
                             beegfs-ctl --listnodes --nodetype=meta --nicdetails --route --reachable --showversion
                             cechon " " ; pause;;
                         2)  clear
-                            cechon " " ; cechon "Connectivity / Reachability of STORAGE nodes" boldred
+                            cechon " " ; cechon "Connectivity / Reachability of $storage_name nodes" boldgreen ; cechon " "
                             beegfs-ctl --listnodes --nodetype=storage --nicdetails --route --reachable --showversion
                             cechon " " ; pause;;
                         3)  clear
-                            cechon " " ; cechon "Connectivity / Reachability of known CLIENTS" boldred
+                            cechon " " ; cechon "Connectivity / Reachability of known $clients_name" boldgreen ; cechon " "
                             beegfs-ctl --listnodes --nodetype=CLIENT --nicdetails --route --reachable --showversion
                             cechon " " ; pause;;
                         q)  clear ; break;;
@@ -493,48 +511,48 @@ do
                 do
                     clear
                     banner ; cechon " " ; cechon " "
-                    cechon "SELECT ONE OF THE ACTIONS AVAILABLE:" boldgreen
+                    cechon "$select_option" boldgreen
                     cechon " Warning: Live IO Stats are CPU / RAM and DISK IO intensive" yellow ;
                     cechon "          Continuous fetching of the IO Stats will negatively affect performance of BeeGFS..." yellow
                     cechon "          To stop Live IO Stats Stream, press any key to stop the madness!" yellow ; cechon " "
-                    cecho "1. Fetch basic requests Stats on" ; cechon " all META nodes" red
-                    cecho "2. Fetch IO Stats on" ; cecho " META nodes for all connected CLIENT nodes " red ; cechon "accessing BeeGFS mounts"
-                    cecho "3. Fetch IO Stats on" ; cecho " META nodes for all SYSTEM USERS " red ; cechon "accessing BeeGFS mounts" ; cechon " "
-                    cecho "4. Fetch basic requests Stats on" ; cechon " all STORAGE nodes" red
-                    cecho "5. Fetch IO Stats on" ; cecho " STORAGE nodes for all connected CLIENT nodes " red ; cechon "accessing BeeGFS mounts"
-                    cecho "6. Fetch IO Stats on" ; cecho " STORAGE nodes for all SYSTEM USERS " red ; cechon "accessing BeeGFS mounts" ; cechon " "
-                    cechon "q. Return to Main Menu"
+                    cecho "1. Fetch basic requests Stats on" ; cechon " all $meta_name nodes" red
+                    cecho "2. Fetch IO Stats on" ; cecho " $meta_name nodes for all connected CLIENT nodes " red ; cechon "accessing BeeGFS mounts"
+                    cecho "3. Fetch IO Stats on" ; cecho " $meta_name nodes for all SYSTEM USERS " red ; cechon "accessing BeeGFS mounts" ; cechon " "
+                    cecho "4. Fetch basic requests Stats on" ; cechon " all $storage_name nodes" red
+                    cecho "5. Fetch IO Stats on" ; cecho " $storage_name nodes for all connected CLIENT nodes " red ; cechon "accessing BeeGFS mounts"
+                    cecho "6. Fetch IO Stats on" ; cecho " $storage_name nodes for all SYSTEM USERS " red ; cechon "accessing BeeGFS mounts" ; cechon " "
+                    cechon "$return_to_main"
                     cechon "_______________________________________________________________________________"
                     cechon " " ; read -r -p "Enter your choice [1-6], or [q] to return to Main Menu: " cc
                     case $cc in
                         1)  clear
-                            cechon " " ; cechon "Basic Requests Stats for META nodes (last 60 seconds, updated every 10 seconds)" boldred
-                            cechon "Press any key to stop the Live output stream" red
+                            cechon " " ; cechon "Basic Requests Stats for $meta_name nodes (last 60 seconds, updated every 10 seconds)" boldgreen ; cechon " "
+                            cechon "$stop_live_output" red
                             beegfs-ctl --serverstats --perserver --names --nodetype=metadata --history=60 --interval=10
                             cechon " " ; pause;;
                         2)  clear
-                            cechon " " ; cechon "Live IO Stats on META nodes for all connected CLIENT nodes accessing BeeGFS mounts (last 60 seconds, updated every 10 seconds)" boldred
-                            cechon "Press any key to stop the Live output stream" red
+                            cechon " " ; cechon "Live IO Stats on $meta_name nodes for all connected CLIENT nodes accessing BeeGFS mounts (last 60 seconds, updated every 10 seconds)" boldgreen ; cechon " "
+                            cechon "$stop_live_output" red
                             beegfs-ctl --clientstats --names --nodetype=meta --interval=10 --perinterval=60
                             cechon " " ; pause;;
                         3)  clear
-                            cechon " " ; cechon "Live IO Stats on META nodes for all SYSTEM USERS accessing BeeGFS mounts (last 60 seconds, updated every 10 seconds)" boldred
-                            cechon "Press any key to stop the Live output stream" red
+                            cechon " " ; cechon "Live IO Stats on $meta_name nodes for all SYSTEM USERS accessing BeeGFS mounts (last 60 seconds, updated every 10 seconds)" boldgreen ; cechon " "
+                            cechon "$stop_live_output" red
                             beegfs-ctl --userstats --names --nodetype=meta --interval=10 --perinterval=60
                             cechon " " ; pause;;
                         4)  clear
-                            cechon " " ; cechon "Basic Requests Stats for STORAGE nodes (last 60 seconds, updated every 10 seconds)" boldred
-                            cechon "Press any key to stop the Live output stream" red
+                            cechon " " ; cechon "Basic Requests Stats for $storage_name nodes (last 60 seconds, updated every 10 seconds)" boldgreen ; cechon " "
+                            cechon "$stop_live_output" red
                             beegfs-ctl --serverstats --perserver --names --nodetype=storage --history=60 --interval=10
                             cechon " " ; pause;;
                         5)  clear
-                            cechon " " ; cechon "Live IO Stats on STORAGE nodes for all connected CLIENT nodes accessing BeeGFS mounts (last 60 seconds, updated every 10 seconds)" boldred
-                            cechon "Press any key to stop the Live output stream" red
+                            cechon " " ; cechon "Live IO Stats on $storage_name nodes for all connected CLIENT nodes accessing BeeGFS mounts (last 60 seconds, updated every 10 seconds)" boldgreen ; cechon " "
+                            cechon "$stop_live_output" red
                             beegfs-ctl --clientstats --names --nodetype=storage --interval=10 --perinterval=60
                             cechon " " ; pause;;
                         6)  clear
-                            cechon " " ; cechon "Live IO Stats on STORAGE nodes for all SYSTEM USERS accessing BeeGFS mounts (last 60 seconds, updated every 10 seconds)" boldred
-                            cechon "Press any key to stop the Live output stream" red
+                            cechon " " ; cechon "Live IO Stats on $storage_name nodes for all SYSTEM USERS accessing BeeGFS mounts (last 60 seconds, updated every 10 seconds)" boldgreen ; cechon " "
+                            cechon "$stop_live_output" red
                             beegfs-ctl --userstats --names --nodetype=storage --interval=10 --perinterval=60
                             cechon " " ; pause;;
                         q)  clear ; break;;
@@ -545,47 +563,47 @@ do
                 do
                     clear
                     banner ; cechon " " ; cechon " "
-                    cechon "SELECT ONE OF THE ACTIONS AVAILABLE:" boldgreen
-                    cecho "1." ; cecho " RESYNC Status " red ; cechon "of META nodes"
-                    cecho "2." ; cecho " RESYNC Status " red ; cechon "of STORAGE nodes" ; cechon " "
+                    cechon "$select_option" boldgreen
+                    cecho "1." ; cecho " RESYNC Status " green ; cechon "of $meta_name nodes"
+                    cecho "2." ; cecho " RESYNC Status " green ; cechon "of $storage_name nodes" ; cechon " "
 
-                    cecho "MR." ; cecho " Request RESYNC " red ; cecho "for META Nodes ("
+                    cecho "MR." ; cecho " Request RESYNC " red ; cecho "for $meta_name Nodes ("
                         for i in "${meta_nodeids[@]}"
                             do
-                                cecho " #$i" boldred
-                            done ; cecho " ) in Mirror Group " ; cechon "#$meta_mirrorgroupid" boldred
+                                cecho " #$i" red
+                            done ; cecho " ) in Mirror Group " ; cechon "#$meta_mirrorgroupid" red
 
                     cechon "   Caution: If resyncing is active on Metadata Nodes, connected clients" yellow
                     cechon "   will experience lagged file access due to temporary blocking of metadata access." yellow
-                    cechon "   Issue RESYNC request only if one of your META Nodes IS in a BAD Consistency." yellow ; cechon " "
-                    cechon "q. Return to Main Menu"
+                    cechon "   Issue RESYNC request only if one of your $meta_name Nodes IS in a BAD Consistency." yellow ; cechon " "
+                    cechon "$return_to_main"
                     cechon "_______________________________________________________________________________"
                     cechon " " ; read -r -p "Enter your choice [1-2, MR], or [q] to return to Main Menu: " cc
                     case $cc in
                         1)  clear
-                            cechon " " ; cechon "RESYNC Status of META Mirror Group ID #$meta_mirrorgroupid" boldred
+                            cechon " " ; cechon "RESYNC Status of $meta_name Mirror Group ID #$meta_mirrorgroupid" boldgreen ; cechon " "
                             beegfs-ctl --resyncstats --nodetype=metadata --mirrorgroupid=$meta_mirrorgroupid
                             for i in "${meta_nodeids[@]}"
                                 do
-                                    cechon " " ; cechon "RESYNC Status of META Node ID #$i" boldred
+                                    cechon " " ; cechon "RESYNC Status of $meta_name Node ID #$i" boldgreen ; cechon " "
                                     beegfs-ctl --resyncstats --nodetype=metadata --target=$i --mirrorgroupid=$meta_mirrorgroupid
                                 done
                             cechon " " ; pause;;
                         2)  clear
                             for i in "${storage_mirrorgroupids[@]}"
                                 do
-                                    cechon " " ; cechon "RESYNC Status of STORAGE Mirror Group ID #$i" boldred
+                                    cechon " " ; cechon "RESYNC Status of $storage_name Mirror Group ID #$i" boldgreen ; cechon " "
                                     beegfs-ctl --resyncstats --nodetype=metadata --target=$i --mirrorgroupid=$meta_mirrorgroupid
                                 done
                             for i in "${storage_targetids[@]}"
                                 do
-                                    cechon " " ; cechon "RESYNC Status of STORAGE Target ID #$i" boldred
+                                    cechon " " ; cechon "RESYNC Status of $storage_name Target ID #$i" boldgreen ; cechon " "
                                     beegfs-ctl --resyncstats --nodetype=metadata --target=$i --mirrorgroupid=$meta_mirrorgroupid
                                 done
                             cechon " " ; pause;;
 
                         MR)  clear
-                            cechon " " ; cechon "Sending RESYNC Request to META Nodes Group ID #$meta_mirrorgroupid" boldred
+                            cechon " " ; cechon "Sending RESYNC Request to $meta_name Nodes Group ID #$meta_mirrorgroupid" boldred
                             beegfs-ctl --startresync --nodetype=metadata --mirrorgroupid=$meta_mirrorgroupid
                             cechon " " ; pause;;
                         q)  clear ; break;;
@@ -596,7 +614,7 @@ do
                 do
                     clear
                     banner ; cechon " " ; cechon " "
-                    cechon "SELECT ONE OF THE ACTIONS AVAILABLE:" boldgreen
+                    cechon "$select_option" boldgreen
                     cecho "1." ; cechon " Look for Unused Inodes and Dispose the Orphants" red
                     cecho "2." ; cechon " Check for Errors in BeeGFS File System without any Repair Attempts" red
                     cecho "3." ; cechon " Check for Errors in BeeGFS File System, and attempt Automatic Repairs (online)" red ; cechon " "
@@ -605,24 +623,24 @@ do
                     cechon "   modification logging, (otherwise false errors might be reported)." yellow
                     cechon "   Use this only if you are sure there is no user access to the file" yellow
                     cechon "   system while the check is running." yellow ; cechon " "
-                    cechon "q. Return to Main Menu"
+                    cechon "$return_to_main"
                     cechon "_______________________________________________________________________________"
                     cechon " " ; read -r -p "Enter your choice [1-3], or [q] to return to Main Menu: " cc
                     case $cc in
                         1)  clear
-                            cechon " " ; cechon "Find and Dispose Unused / Orphant Inodes" boldred
+                            cechon " " ; cechon "Find and Dispose Unused / Orphant Inodes" boldgreen ; cechon " "
                             beegfs-ctl  --disposeunused --printstats --printnodes --dispose
                             cechon " " ; pause;;
                         2)  clear
-                            cechon " " ; cechon "Check for Errors in BeeGFS File System without any Repair Attempts" boldred
+                            cechon " " ; cechon "Check for Errors in BeeGFS File System without any Repair Attempts" boldgreen ; cechon " "
                             beegfs-fsck --checkfs --overwriteDbFile --readOnly
                             cechon " " ; pause;;
                         3)  clear
-                            cechon " " ; cechon "Check for Errors in BeeGFS File System and Automatic Repairs (online)" boldred
+                            cechon " " ; cechon "Check for Errors in BeeGFS File System and Automatic Repairs (online)" boldgreen ; cechon " "
                             beegfs-fsck --checkfs --overwriteDbFile --automatic
                             cechon " " ; pause;;
                         4)  clear
-                            cechon " " ; cechon "Check for Errors in BeeGFS File System and Automatic Repairs (offline)" boldred
+                            cechon " " ; cechon "Check for Errors in BeeGFS File System and Automatic Repairs (offline)" boldgreen ; cechon " "
                             beegfs-fsck --checkfs --overwriteDbFile --runoffline --automatic
                             cechon " " ; pause;;
                         q)  clear ; break;;
@@ -633,7 +651,7 @@ do
                 do
                     clear
                     banner ; cechon " " ; cechon " "
-                    cechon "SELECT ONE OF THE ACTIONS AVAILABLE:" boldgreen
+                    cechon "$select_option" boldgreen
                     cechon "Warning: Benchmarking operations are CPU, Disk and Network intensive," yellow
                     cechon "         thus your users and / or applications will experience delayed FS access." yellow ; cechon " "
                     cecho "1." ; cecho " STEP 1.1: Launch BeeGFS filesystem Benchmark on all storage targets for" green ; cecho " WRITE " red ; cechon "operations with block size of $beegfs_bench_blocksize, file space of $beegfs_bench_size, and $beegfs_bench_threads CPU threads" green ; cechon " "
@@ -644,33 +662,33 @@ do
                     cechon "   After all the WRITE benchmarks are reported to be finished, collect your WRITE" yellow
                     cechon "   Benchmark Results, executing STEP 2, and then proceed to READ Benchmark." yellow ; cechon " "
                     cecho "3." ; cecho " STEP 2: Monitor and collect WRITE / READ Benchmark" green ; cechon " RESULTS " red ; cechon " "
-                    cecho "4." ; cechon " Stop currently running WRITE / READ Benchmark" magenta ; cechon " "
-                    cecho "5." ; cechon " Cleanup the BeegFS File System" red
+                    cecho "4." ; cechon " Stop currently running WRITE / READ Benchmark" boldred ; cechon " "
+                    cecho "5." ; cechon " Cleanup the BeegFS File System" boldred
                     cechon "   Advise: After all the WRITE / READ Benchmarks are complete, and Results / Statistics are collected," yellow
                     cechon "   you are urged to free up disk space by running the Automatic CLEANUP of BeeGFS File System," yellow
                     cechon "   in order to get rid of multi-gigabyte files created in each Storage Tagret." yellow ; cechon " "
-                    cechon "q. Return to Main Menu"
+                    cechon "$return_to_main"
                     cechon "_______________________________________________________________________________"
                     cechon " " ; read -r -p "Enter your choice [1-3], or [q] to return to Main Menu: " cc
                     case $cc in
                         1)  clear
-                            cechon " " ; cechon "STEP 1.1: Launching BeeGFS filesystem Benchmark on ALL STORAGE TARGETS for WRITE operations with block size of $beegfs_bench_blocksize, file space of $beegfs_bench_size, and $beegfs_bench_threads CPU threads" boldred
+                            cechon " " ; cechon "STEP 1.1: Launching BeeGFS filesystem Benchmark on ALL $storage_name TARGETS for WRITE operations with block size of $beegfs_bench_blocksize, file space of $beegfs_bench_size, and $beegfs_bench_threads CPU threads" boldgreen ; cechon " "
                             beegfs-ctl --storagebench --alltargets --write --blocksize=$beegfs_bench_blocksize --size=$beegfs_bench_size --threads=$beegfs_bench_threads
                             cechon " " ; pause;;
                         2)  clear
-                            cechon " " ; cechon "STEP 1.1: Launching BeeGFS filesystem Benchmark on ALL STORAGE TARGETS for READ operations with block size of $beegfs_bench_blocksize, file space of $beegfs_bench_size, and $beegfs_bench_threads CPU threads" boldred
+                            cechon " " ; cechon "STEP 1.1: Launching BeeGFS filesystem Benchmark on ALL $storage_name TARGETS for READ operations with block size of $beegfs_bench_blocksize, file space of $beegfs_bench_size, and $beegfs_bench_threads CPU threads" boldgreen ; cechon " "
                             beegfs-ctl --storagebench --alltargets --read --blocksize=$beegfs_bench_blocksize --size=$beegfs_bench_size --threads=$beegfs_bench_threads
                             cechon " " ; pause;;
                         3)  clear
-                            cechon " " ; cechon "Collecting WRITE / READ Benchmark Results" boldred
+                            cechon " " ; cechon "Collecting WRITE / READ Benchmark Results" boldgreen ; cechon " "
                             beegfs-ctl --storagebench --status --alltargets --verbose
                             cechon " " ; pause;;
                         4)  clear
-                            cechon " " ; cechon "Stopping currently running WRITE / READ Benchmarks" boldred
+                            cechon " " ; cechon "Stopping currently running WRITE / READ Benchmarks" boldgreen ; cechon " "
                             beegfs-ctl --storagebench --alltargets --stop
                             cechon " " ; pause;;
                         5)  clear
-                            cechon " " ; cechon "Cleaning up the BeegFS File System for freeing up space after performed Benchmarks" boldred
+                            cechon " " ; cechon "Cleaning up the BeegFS File System for freeing up space after performed Benchmarks" boldgreen ; cechon " "
                             beegfs-ctl --storagebench --cleanup --alltargets
                             cechon " " ; pause;;
                         q)  clear ; break;;
@@ -681,7 +699,7 @@ do
                 do
                     clear
                     banner ; cechon " " ; cechon " "
-                    cechon "SELECT ONE OF THE ACTIONS AVAILABLE:" boldgreen
+                    cechon "$select_option" boldgreen
                     cechon "Warning: Benchmarking operations are CPU, Disk and Network intensive," yellow
                     cechon "         thus your users and / or applications will experience delayed FS access." yellow ; cechon " "
                     cecho "1." ; cecho " Run timed ($fio_runtime sec.) FIO Benchmark of BeeGFS filesystem on" green ; cecho " RANDOM DIRECT READ / WRITE " red ; cechon "operations" green
@@ -693,14 +711,15 @@ do
                     cecho "4." ; cecho " Perform IOPING tests of" green ; cecho " NETWORK LATENCY / FILE ACCESS TIME " red ; cechon "with block size of $fio_blocksize, file space of $fio_size," green
                     cechon "   requesting $ioping_maxiops IOPS for a maximum time of $fio_runtime seconds, collecting raw statistics every $ioping_time_period seconds," green
                     cechon "   with $ioping_interval seconds interval between requests, and using DIRECT IO at $fio_netdev" green ; cechon " "
-                    cechon "   Notice: Benchmark results of both FIO and IOPING will be saved in the location" yellow
-                    cechon "   of your beegfs-mgmt-helper.sh script." yellow ; cechon " "
-                    cechon "q. Return to Main Menu"
+                    cechon "   Notice: Benchmark results of both FIO and IOPING will be saved in" yellow
+                    cechon "    $PWD_BR/" yellow ; cechon " "
+                    cechon "$return_to_main"
                     cechon "_______________________________________________________________________________"
                     cechon " " ; read -r -p "Enter your choice [1-3], or [q] to return to Main Menu: " cc
                     case $cc in
                         1)  clear
-                            cechon " " ; cechon "Running timed ($fio_runtime sec.) FIO Benchmark of BeeGFS filesystem on RANDOM DIRECT READ / WRITE operations with read/write ratio of $fio_rwmixread/$fio_rwmixwrite, block size of $fio_blocksize, file space of $fio_size, $fio_numjobs process(es) at $fio_netdev" boldred ; cechon " "
+                            [[ -d $PWD_BR ]] || mkdir ./$bench_res_dir
+                            cechon " " ; cechon "Running timed ($fio_runtime sec.) FIO Benchmark of BeeGFS filesystem on RANDOM DIRECT READ / WRITE operations with read/write ratio of $fio_rwmixread/$fio_rwmixwrite, block size of $fio_blocksize, file space of $fio_size, $fio_numjobs process(es) at $fio_netdev" boldgreen ; cechon " " ; cechon " "
                             fio --name=RandomDirectReadWrite \
                                 --rw=randrw \
                                 --rwmixread=$fio_rwmixread \
@@ -718,11 +737,12 @@ do
                                 --ioengine=$fio_ioengine \
                                 --status-interval=60 \
                                 -gtod_reduce=1 \
-                                --group_reporting 2>&1 | tee ./fio_rand-direct-read-write_$dt.txt
+                                --group_reporting 2>&1 | tee ./$bench_res_dir/fio_beegfs_rand-direct-read-write_$dt.txt
                                 rm $fio_block_dev
-                            cechon " " ; cechon "Benchmarking results are saved in $PWD/fio_rand-direct-read-write_$dt.txt" yellow ; cechon " " ; pause;;
+                            cechon " " ; cechon "Benchmarking results are saved in $PWD_BR/fio_beegfs_rand-direct-read-write_$dt.txt" yellow ; cechon " " ; pause;;
                         2)  clear
-                            cechon " " ; cechon "Running timed ($fio_runtime sec.) FIO Benchmark of BeeGFS filesystem on RANDOM DIRECT READ operations with block size of $fio_blocksize, file space of $fio_size, $fio_numjobs process(es) at $fio_netdev" boldred ; cechon " "
+                            [[ -d $PWD_BR ]] || mkdir ./$bench_res_dir
+                            cechon " " ; cechon "Running timed ($fio_runtime sec.) FIO Benchmark of BeeGFS filesystem on RANDOM DIRECT READ operations with block size of $fio_blocksize, file space of $fio_size, $fio_numjobs process(es) at $fio_netdev" boldgreen ; cechon " " ; cechon " "
                             fio --name=RandomDirectRead \
                                 --rw=randread \
                                 --runtime=$fio_runtime \
@@ -739,11 +759,12 @@ do
                                 --ioengine=$fio_ioengine \
                                 --status-interval=60 \
                                 -gtod_reduce=1 \
-                                --group_reporting 2>&1 | tee ./fio_rand-direct-read_$dt.txt
+                                --group_reporting 2>&1 | tee ./$bench_res_dir/fio_beegfs_rand-direct-read_$dt.txt
                                 rm $fio_block_dev
-                            cechon " " ; cechon "Benchmarking results are saved in $PWD/fio_rand-direct-read_$dt.txt" yellow ; cechon " " ; pause;;
+                            cechon " " ; cechon "Benchmarking results are saved in $PWD_BR/fio_beegfs_rand-direct-read_$dt.txt" yellow ; cechon " " ; pause;;
                         3)  clear
-                            cechon " " ; cechon "Running timed ($fio_runtime sec.) FIO Benchmark of BeeGFS filesystem on RANDOM DIRECT WRITE operations with block size of $fio_blocksize, file space of $fio_size, $fio_numjobs process(es) at $fio_netdev" boldred ; cechon " "
+                            [[ -d $PWD_BR ]] || mkdir ./$bench_res_dir
+                            cechon " " ; cechon "Running timed ($fio_runtime sec.) FIO Benchmark of BeeGFS filesystem on RANDOM DIRECT WRITE operations with block size of $fio_blocksize, file space of $fio_size, $fio_numjobs process(es) at $fio_netdev" boldgreen ; cechon " " ; cechon " "
                             fio --name=RandomDirectWrite \
                                 --rw=randwrite \
                                 --runtime=$fio_runtime \
@@ -760,11 +781,12 @@ do
                                 --ioengine=$fio_ioengine \
                                 --status-interval=60 \
                                 -gtod_reduce=1 \
-                                --group_reporting 2>&1 | tee ./fio_rand-direct-write_$dt.txt
+                                --group_reporting 2>&1 | tee ./$bench_res_dir/fio_beegfs_rand-direct-write_$dt.txt
                                 rm $fio_block_dev
-                            cechon " " ; cechon "Benchmarking results are saved in $PWD/fio_rand-direct-write_$dt.txt" yellow ; cechon " " ; pause;;
+                            cechon " " ; cechon "Benchmarking results are saved in $PWD_BR/fio_beegfs_rand-direct-write_$dt.txt" yellow ; cechon " " ; pause;;
                         4)  clear
-                            cechon " " ; cechon "Measuring NETWORK LATENCY / FILE ACCESS TIME with block size of $fio_blocksize, file space of $fio_size, requesting $ioping_maxiops IOPS for a maximum time of $fio_runtime seconds, collecting raw statistics every $ioping_time_period seconds, with $ioping_interval seconds interval between requests, and using DIRECT IO at $fio_netdev" boldred ; cechon " "
+                            [[ -d $PWD_BR ]] || mkdir ./$bench_res_dir
+                            cechon " " ; cechon "Measuring NETWORK LATENCY / FILE ACCESS TIME with block size of $fio_blocksize, file space of $fio_size, requesting $ioping_maxiops IOPS for a maximum time of $fio_runtime seconds, collecting raw statistics every $ioping_time_period seconds, with $ioping_interval seconds interval between requests, and using DIRECT IO at $fio_netdev" boldgreen ; cechon " " ; cechon " "
                             cechon "How to read RAW STATISTICS:" boldyellow ; cechon " "
                             cechon "17805 4513437 3945 16158258 50 253 2601 113" yellow
                             cechon "17881 4577080 3907 16001594 47 256 2606 99" yellow
@@ -776,14 +798,129 @@ do
                             cechon "(5) minimal request time (usec)" yellow
                             cechon "(6) average request time (usec)" yellow
                             cechon "(7) maximum request time (usec)" yellow
-                            cechon "(8) request time standard deviation (usec)" yellow ; cechon " "
-                            cechon "RAW STATISTICS:" boldgreen
-                            ioping -c $ioping_maxiops -w $fio_runtime -P $ioping_time_period -S $fio_size -s $fio_blocksize -i $ioping_interval -q -D $fio_netdev/ 2>&1 | tee ./ioping_results_$dt.txt
-                            cechon " " ; cechon "Benchmarking results are saved in $PWD/ioping_results_$dt.txt" yellow ; cechon " " ; pause;;
+                            cechon "(8) request time standard deviation (usec)" yellow ; cechon " " ; cechon " "
+                            cechon "RAW STATISTICS:" boldgreen ; cechon " "
+                            ioping -c $ioping_maxiops -w $fio_runtime -P $ioping_time_period -S $fio_size -s $fio_blocksize -i $ioping_interval -q -D $fio_netdev/ 2>&1 | tee ./$bench_res_dir/ioping_beegfs_results_$dt.txt
+                            cechon " " ; cechon "Benchmarking results are saved in $PWD_BR/ioping_beegfs_results_$dt.txt" yellow ; cechon " " ; pause;;
                         q)  clear ; break;;
                         *)  pause "$proper_action"
                 esac
             done;;
+
+
+        9)  while :
+                do
+                    clear
+                    banner ; cechon " " ; cechon " "
+                    cechon "$select_option" boldgreen
+                    cechon "Warning: Benchmarking operations are CPU, Disk and Network intensive," yellow
+                    cechon "         thus your users and / or applications will experience delayed FS access." yellow ; cechon " "
+                    cecho "1." ; cecho " Run timed ($fio_runtime sec.) FIO Benchmark of underlying FS for BeeGFS' Local $storage_name Target on" green ; cecho " RANDOM DIRECT READ / WRITE " red ; cechon "operations" green
+                    cechon "   with read/write ratio of $fio_rwmixread/$fio_rwmixwrite, block size of $fio_blocksize, file space of $fio_size, $fio_numjobs process(es) at $beegfs_storage_base" green ; cechon " "
+                    cecho "2." ; cecho " Run timed ($fio_runtime sec.) FIO Benchmark of underlying FS for BeeGFS' Local $storage_name Target on" green ; cecho " RANDOM DIRECT READ " red ; cechon "operations" green
+                    cechon "   with block size of $fio_blocksize, file space of $fio_size, $fio_numjobs process(es) at $beegfs_storage_base" green ; cechon " "
+                    cecho "3." ; cecho " Run timed ($fio_runtime sec.) FIO Benchmark of underlying FS for BeeGFS' Local $storage_name Target on" green ; cecho " RANDOM DIRECT WRITE " red ; cechon "operations" green
+                    cechon "   with block size of $fio_blocksize, file space of $fio_size, $fio_numjobs process(es) at $beegfs_storage_base" green ; cechon " "
+                    cecho "4." ; cecho " Perform IOPING tests of" green ; cecho " NETWORK LATENCY / FILE ACCESS TIME " red ; cechon "with block size of $fio_blocksize, file space of $fio_size," green
+                    cechon "   requesting $ioping_maxiops IOPS for a maximum time of $fio_runtime seconds, collecting raw statistics every $ioping_time_period seconds," green
+                    cechon "   with $ioping_interval seconds interval between requests, and using DIRECT IO at $beegfs_storage_base" green ; cechon " "
+                    cechon "   Notice: Benchmark results of both FIO and IOPING will be saved in" yellow
+                    cechon "    $PWD_BR/" yellow ; cechon " "
+                    cechon "$return_to_main"
+                    cechon "_______________________________________________________________________________"
+                    cechon " " ; read -r -p "Enter your choice [1-3], or [q] to return to Main Menu: " cc
+                    case $cc in
+                        1)  clear
+                            [[ -d $PWD_BR ]] || mkdir ./$bench_res_dir
+                            cechon " " ; cechon "Running timed ($fio_runtime sec.) FIO Benchmark of underlying FS for BeeGFS' Local $storage_name Target on RANDOM DIRECT READ / WRITE operations with read/write ratio of $fio_rwmixread/$fio_rwmixwrite, block size of $fio_blocksize, file space of $fio_size, $fio_numjobs process(es) at $beegfs_storage_base" boldgreen ; cechon " " ; cechon " "
+                            fio --name=RandomDirectReadWrite \
+                                --rw=randrw \
+                                --rwmixread=$fio_rwmixread \
+                                --runtime=$fio_runtime \
+                                --time_based \
+                                --randrepeat=1 \
+                                --numjobs=$fio_numjobs \
+                                --size=$fio_size \
+                                --filesize=$fio_size \
+                                --filename=$fio_block_dev \
+                                --bs=$fio_blocksize \
+                                --direct=1 \
+                                --sync=0 \
+                                --iodepth=$fio_iodepth \
+                                --ioengine=$fio_ioengine \
+                                --status-interval=60 \
+                                -gtod_reduce=1 \
+                                --group_reporting 2>&1 | tee ./$bench_res_dir/fio_local_fs_rand-direct-read-write_$dt.txt
+                                rm $fio_block_dev
+                            cechon " " ; cechon "Benchmarking results are saved in $PWD_BR/fio_local_fs_rand-direct-read-write_$dt.txt" yellow ; cechon " " ; pause;;
+                        2)  clear
+                            [[ -d $PWD_BR ]] || mkdir ./$bench_res_dir
+                            cechon " " ; cechon "Running timed ($fio_runtime sec.) FIO Benchmark of underlying FS for BeeGFS' Local $storage_name Target on RANDOM DIRECT READ operations with block size of $fio_blocksize, file space of $fio_size, $fio_numjobs process(es) at $beegfs_storage_base" boldgreen ; cechon " " ; cechon " "
+                            fio --name=RandomDirectRead \
+                                --rw=randread \
+                                --runtime=$fio_runtime \
+                                --time_based \
+                                --randrepeat=1 \
+                                --numjobs=$fio_numjobs \
+                                --size=$fio_size \
+                                --filesize=$fio_size \
+                                --filename=$fio_block_dev \
+                                --bs=$fio_blocksize \
+                                --direct=1 \
+                                --sync=0 \
+                                --iodepth=$fio_iodepth \
+                                --ioengine=$fio_ioengine \
+                                --status-interval=60 \
+                                -gtod_reduce=1 \
+                                --group_reporting 2>&1 | tee ./$bench_res_dir/fio_local_fs_rand-direct-read_$dt.txt
+                                rm $fio_block_dev
+                            cechon " " ; cechon "Benchmarking results are saved in $PWD_BR/fio_local_fs_rand-direct-read_$dt.txt" yellow ; cechon " " ; pause;;
+                        3)  clear
+                            [[ -d $PWD_BR ]] || mkdir ./$bench_res_dir
+                            cechon " " ; cechon "Running timed ($fio_runtime sec.) FIO Benchmark of underlying FS for BeeGFS' Local $storage_name Target on RANDOM DIRECT WRITE operations with block size of $fio_blocksize, file space of $fio_size, $fio_numjobs process(es) at $beegfs_storage_base" boldgreen ; cechon " " ; cechon " "
+                            fio --name=RandomDirectWrite \
+                                --rw=randwrite \
+                                --runtime=$fio_runtime \
+                                --time_based \
+                                --randrepeat=1 \
+                                --numjobs=$fio_numjobs \
+                                --size=$fio_size \
+                                --filesize=$fio_size \
+                                --filename=$fio_block_dev \
+                                --bs=$fio_blocksize \
+                                --direct=1 \
+                                --sync=0 \
+                                --iodepth=$fio_iodepth \
+                                --ioengine=$fio_ioengine \
+                                --status-interval=60 \
+                                -gtod_reduce=1 \
+                                --group_reporting 2>&1 | tee ./$bench_res_dir/fio_local_fs_rand-direct-write_$dt.txt
+                                rm $fio_block_dev
+                            cechon " " ; cechon "Benchmarking results are saved in $PWD_BR/fio_local_fs_rand-direct-write_$dt.txt" yellow ; cechon " " ; pause;;
+                        4)  clear
+                            [[ -d $PWD_BR ]] || mkdir ./$bench_res_dir
+                            cechon " " ; cechon "Measuring NETWORK LATENCY / FILE ACCESS TIME with block size of $fio_blocksize, file space of $fio_size, requesting $ioping_maxiops IOPS for a maximum time of $fio_runtime seconds, collecting raw statistics every $ioping_time_period seconds, with $ioping_interval seconds interval between requests, and using DIRECT IO at $beegfs_storage_base" boldgreen ; cechon " " ; cechon " "
+                            cechon "How to read RAW STATISTICS:" boldyellow ; cechon " "
+                            cechon "17805 4513437 3945 16158258 50 253 2601 113" yellow
+                            cechon "17881 4577080 3907 16001594 47 256 2606 99" yellow
+                            cechon "(1)   (2)     (3)  (4)      (5) (6) (7) (8)" yellow ; cechon " "
+                            cechon "(1) number of requests in $ioping_time_period seconds period" yellow
+                            cechon "(2) serving time         (usec)" yellow
+                            cechon "(3) requests per second  (iops)" yellow
+                            cechon "(4) transfer speed       (bytes/sec)" yellow
+                            cechon "(5) minimal request time (usec)" yellow
+                            cechon "(6) average request time (usec)" yellow
+                            cechon "(7) maximum request time (usec)" yellow
+                            cechon "(8) request time standard deviation (usec)" yellow ; cechon " " ; cechon " "
+                            cechon "RAW STATISTICS:" boldgreen ; cechon " "
+                            ioping -c $ioping_maxiops -w $fio_runtime -P $ioping_time_period -S $fio_size -s $fio_blocksize -i $ioping_interval -q -D $beegfs_storage_base/ 2>&1 | tee ./$bench_res_dir/ioping_local_fs_results_$dt.txt
+                            cechon " " ; cechon "Benchmarking results are saved in $PWD_BR/ioping_local_fs_results_$dt.txt" yellow ; cechon " " ; pause;;
+                        q)  clear ; break;;
+                        *)  pause "$proper_action"
+                esac
+            done;;
+
+
 	q)  clear ; break;;
 	*) pause "$proper_action"
     esac
