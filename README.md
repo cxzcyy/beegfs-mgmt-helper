@@ -23,3 +23,7 @@ Under `#### EDIT VARIABLES BELLOW, TO FIT YOUR ENVIRONMENT ####` change variable
 
 Any Linux Distribution with latest BeeGFS build
 * Developed, and Deployed under Ubuntu 16.04
+
+
+*Repository Maintenance*
+Since Dec 15, 2016 I am not to maintain the repository. I have very bad experience with the BeeGFS. The BeeGFS corrupted hundreds of files, so I ended up abandoning it and switching over to GlusterFS.
